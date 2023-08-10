@@ -1,0 +1,9 @@
+source;share/lidar_controller_stream/hook/pythonpath.ps1
+source;share/lidar_controller_stream/hook/pythonpath.dsv
+source;share/lidar_controller_stream/hook/pythonpath.sh
+source;share/lidar_controller_stream/hook/ament_prefix_path.ps1
+source;share/lidar_controller_stream/hook/ament_prefix_path.dsv
+source;share/lidar_controller_stream/hook/ament_prefix_path.sh
+source;../../build/lidar_controller_stream/share/lidar_controller_stream/hook/pythonpath_develop.ps1
+source;../../build/lidar_controller_stream/share/lidar_controller_stream/hook/pythonpath_develop.dsv
+source;../../build/lidar_controller_stream/share/lidar_controller_stream/hook/pythonpath_develop.sh
