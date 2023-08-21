@@ -471,6 +471,8 @@ class SemanticKittiDataset(PointCloudDataset):
 
                 num_merged += 1
                 f_inc += 1
+                
+                print("merged: ", num_merged)
 
             t += [time.time()]
 
@@ -926,14 +928,16 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
         # Training or test set
         self.set = set
 
+        self.sequences = []
+
         # Get a list of sequences
-        if self.set == 'test':
-            list_of_sequences = np.sort(listdir(join(self.path, 'sequences')))
-            self.sequences = [list_of_sequences[-1]]# self.sequences = ['{:02d}'.format(i) for i in range(11, 22)]
-        else:
-            raise ValueError('Unknown set for SemanticKitti data: ', self.set)
+        # if self.set == 'test':
+        #     list_of_sequences = np.sort(listdir(join(self.path, 'sequences')))
+        #     self.sequences = [list_of_sequences[-1]]# self.sequences = ['{:02d}'.format(i) for i in range(11, 22)]
+        # else:
+        #     raise ValueError('Unknown set for SemanticKitti data: ', self.set)
         
-        print("reading from sequence: ", self.sequences)
+        # print("reading from sequence: ", self.sequences)
 
         self.frames = []
 
@@ -1052,8 +1056,8 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
         self.worker_waiting = torch.tensor([0 for _ in range(config.input_threads)], dtype=torch.int32)
         self.worker_waiting.share_memory_()
         self.worker_lock = Lock()
-        self.data_index = -1
         self.data_batch_i = -1
+        self.data_update_flag = False
 
         return
     
@@ -1061,28 +1065,35 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
         
         return len(self.frames)
     
-    def update_data(self, batch_i):
+    def update_data(self, data):
         # List all files in each sequence
         ###################################
         # Prepare the indices of all frames
         ###################################
-        velo_files = np.sort(listdir(join(self.path, 'sequences', self.sequences[0],'velodyne')))
-        frames = [vf[:-4] for vf in velo_files[self.data_index+1: self.data_index+self.config.n_test_frames+1] if vf.endswith('.bin')]
-        if (self.data_index+self.config.n_test_frames+1) > len(velo_files):
-            print("End of streamable data, Stopping inference.")
+        # velo_files = np.sort(listdir(join(self.path, 'sequences', self.sequences[0],'velodyne')))
+        # frames = [vf[:-4] for vf in velo_files[self.data_index+1: self.data_index+self.config.n_test_frames+1] if vf.endswith('.bin')]
+        # if (self.data_index+self.config.n_test_frames+1) > len(velo_files):
+        #     print("End of streamable data, Stopping inference.")
+        #     raise StopIteration
+        
+        if len(data) == 0:
             raise StopIteration
         
+        if len(self.frames) == 1 and len(self.frames[0]) == self.config.buffer_size:
+            self.frames[0].pop(0)
+        
         if len(self.frames) == 0:
-            self.frames.append(frames)
+            self.frames.append([data])
         else:
-            self.frames[0].extend(frames)
+            self.frames[0].append(data)
 
         seq_inds = np.hstack([np.ones(len(_), dtype=np.int32) * i for i, _ in enumerate(self.frames)])
         frame_inds = np.hstack([np.arange(len(_), dtype=np.int32) for _ in self.frames])
         self.all_inds = np.vstack((seq_inds, frame_inds)).T
+
+        self.data_update_flag = True
         
-        self.data_index += self.config.n_test_frames
-        self.data_batch_i += 1
+        # self.data_batch_i = len(self.frames[0]) - 1
         return 
     
     def getitem(self, batch_i):
@@ -1122,7 +1133,7 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
                 if self.epoch_i >= self.epoch_inds.shape[0]:
                     self.epoch_i = 0
                 # Get potential minimum
-                ind = int(self.epoch_inds[self.epoch_i])
+                # ind = int(self.epoch_inds[self.epoch_i])
                 wanted_label = int(self.epoch_labels[self.epoch_i])
 
                 # Update epoch indice
@@ -1130,10 +1141,7 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
 
 
             #print (ind)
-            if self.seqential_batch:
-                s_ind, f_ind = self.all_inds[batch_i]
-            else:
-                s_ind, f_ind = self.all_inds[ind]
+            s_ind, f_ind = self.all_inds[batch_i]
 
             t += [time.time()]
 
@@ -1178,12 +1186,14 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
                         continue
 
                 # Path of points and labels
-                seq_path = join(self.path, 'sequences', self.sequences[s_ind])
-                velo_file = join(seq_path, 'velodyne', self.frames[s_ind][f_ind - f_inc] + '.bin')
+                # seq_path = join(self.path, 'sequences', self.sequences[s_ind])
+                # velo_file = join(seq_path, 'velodyne', self.frames[s_ind][f_ind - f_inc] + '.bin')
+                # velo_file = self.frames[s_ind][f_ind - f_inc]
                 if self.set == 'test':
                     label_file = None
                 # Read points
-                frame_points = np.fromfile(velo_file, dtype=np.float32)
+                # frame_points = np.fromfile(velo_file, dtype=np.float32)
+                frame_points = self.frames[s_ind][f_ind - f_inc]
                 points = frame_points.reshape((-1, 4))
 
                 if self.set == 'test':
@@ -1581,12 +1591,19 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
             print('stack ..... {:5.1f}ms'.format(1000 * (t[ti+1] - t[ti])))
             ti += 1
             print('\n************************\n')
+        
+        self.data_update_flag = False
 
         return [self.config.num_layers] + input_list
 
     def __iter__(self):
-        self.update_data(self.data_batch_i)
-        return SemanticKittiCustomBatch([self.getitem(self.data_batch_i)])
+        # self.update_data(data)
+        try:
+            assert self.data_update_flag, "Reached end of the Data Stream."
+            return SemanticKittiCustomBatch([self.getitem(self.data_batch_i)])
+        except AssertionError as msg:
+            print(msg)
+            raise StopIteration
     
     def __next__(self):
         return self.__iter__()
@@ -1603,19 +1620,15 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
         self.calibrations = []
         self.times = []
         self.poses = []
-        
-        seq = listdir(join(self.path, 'sequences'))[-1]
-
-        seq_folder = join(self.path, 'sequences', seq)
 
         # Read Calib
-        self.calibrations.append(self.parse_calibration(join(seq_folder, "calib.txt")))
+        self.calibrations.append(self.parse_calibration(join(self.path, "calib.txt")))
 
         # Read times
         # self.times.append(np.loadtxt(join(seq_folder, 'times.txt'), dtype=np.float32))
 
         # Read poses
-        poses_f64 = self.parse_poses(join(seq_folder, 'poses.txt'), self.calibrations[-1])
+        poses_f64 = self.parse_poses(join(self.path, 'poses.txt'), self.calibrations[-1])
         self.poses.append([pose.astype(np.float32) for pose in poses_f64])
 
         return

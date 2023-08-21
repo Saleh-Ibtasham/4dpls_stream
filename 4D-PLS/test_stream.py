@@ -35,6 +35,9 @@ from torch.utils.data import DataLoader
 from utils.config import Config
 from utils.tester import ModelTester
 from models.architectures import KPCNN, KPFCNN
+from visualize import Visualizer
+
+from stitch_tracklets_stream import *
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -47,38 +50,6 @@ torch.cuda.manual_seed_all(0)
 #       \***************/
 #
 
-def model_choice(chosen_log):
-
-    ###########################
-    # Call the test initializer
-    ###########################
-
-    # Automatically retrieve the last trained model
-    if chosen_log in ['last_ModelNet40', 'last_ShapeNetPart', 'last_S3DIS']:
-
-        # Dataset name
-        test_dataset = '_'.join(chosen_log.split('_')[1:])
-
-        # List all training logs
-        logs = np.sort([os.path.join('results', f) for f in os.listdir('results') if f.startswith('Log')])
-
-        # Find the last log of asked dataset
-        for log in logs[::-1]:
-            log_config = Config()
-            log_config.load(log)
-            if log_config.dataset.startswith(test_dataset):
-                chosen_log = log
-                break
-
-        if chosen_log in ['last_ModelNet40', 'last_ShapeNetPart', 'last_S3DIS']:
-            raise ValueError('No log of the dataset "' + test_dataset + '" found')
-
-    # Check if log exists
-    if not os.path.exists(chosen_log):
-        raise ValueError('The given log does not exists: ' + chosen_log)
-
-    return chosen_log
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 #
@@ -86,6 +57,165 @@ def model_choice(chosen_log):
 #       \***************/
 #
 
+class TestStream():
+    def __init__(self, buffer_size) -> None:
+        self.chosen_log = 'results/Log_2022-08-30_11-04-33'
+        chkp_idx = 1
+
+        # Deal with 'last_XXXXXX' choices
+        self.chosen_log = self.model_choice(self.chosen_log)
+
+        ############################
+        # Initialize the environment
+        ############################
+
+        # Set which gpu is going to be used
+        GPU_ID = '0'
+        if torch.cuda.device_count() > 1:
+            GPU_ID = '0, 1'
+            
+        # changed by wangkang to set GPU
+        # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+        
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda:0")
+        else:
+            self.device = torch.device("cpu")
+
+        
+        torch.cuda.empty_cache()
+        # torch.cuda.set_device(int(GPU_ID))
+        # print(torch.cuda.current_device())
+        
+        print("torch is using: ", torch.cuda.get_device_name()) # uncomment when cuda
+
+        ###############
+        # Previous chkp
+        ###############
+
+        # Find all checkpoints in the chosen training folder
+        self.chkp_path = os.path.join(self.chosen_log, 'checkpoints')
+        chkps = [f for f in os.listdir(self.chkp_path) if 'chkp' in f]
+        
+        # Find which snapshot to restore
+        if chkp_idx is None:
+            chosen_chkp = 'current_chkp.tar'
+        else:
+            chosen_chkp = np.sort(chkps)[chkp_idx]
+        chosen_chkp = os.path.join(self.chosen_log, 'checkpoints', chosen_chkp)
+
+        # Initialize configuration class
+        self.config = Config()
+        self.config.load(self.chosen_log)
+
+
+        ##################################
+        # Change model parameters for test
+        ##################################
+
+        # Change parameters for the test here. For example, you can stop augmenting the input data.
+
+        self.config.global_fet = False
+        self.config.validation_size = 10
+        self.config.input_threads = 16
+        self.config.n_frames = 4
+        self.config.n_test_frames = 1 #it should be smaller than config.n_frames
+        if self.config.n_frames < self.config.n_test_frames:
+            self.config.n_frames = self.config.n_test_frames
+        self.config.big_gpu = False
+        self.config.dataset_task = '4d_panoptic'
+        #self.config.sampling = 'density'
+        self.config.sampling = 'importance'
+        self.config.decay_sampling = 'None'
+        self.config.stride = 1
+        self.config.first_subsampling_dl = 0.05
+        self.config.buffer_size = buffer_size
+
+
+        ##############
+        # Prepare Data
+        ##############
+
+        print()
+        print('Dataset Preparation')
+        print('****************')
+        self.set = "test"
+
+        # Initiate dataset
+        if self.config.dataset == 'SemanticKitti':
+            self.test_dataset = SemanticKittiStreamDataset(self.config, set=self.set, balance_classes=False, seqential_batch=True)
+        else:
+            raise ValueError('Unsupported dataset : ' + self.config.dataset)
+
+        print('\nModel Preparation')
+        print('*****************')
+
+        # Define network model
+        self.stitch_stream = StreamStitchTracklet()
+        t1 = time.time()
+        if self.config.dataset_task == 'classification':
+            self.net = KPCNN(self.config)
+        elif self.config.dataset_task in ['cloud_segmentation', 'slam_segmentation']:
+            self.net = KPFCNN(self.config, self.test_dataset.label_values, self.test_dataset.ignored_labels)
+        else:
+            raise ValueError('Unsupported dataset_task for testing: ' + self.config.dataset_task)
+
+        # Define a visualizer class
+        self.tester = ModelTester(self.net, chkp_path=chosen_chkp)
+        print('Done in {:.1f}s\n'.format(time.time() - t1))
+
+        print('\nStart test')
+        print('**********\n')
+        
+        self.config.dataset_task = '4d_panoptic'
+        
+        return
+    
+    def start_test(self):
+        if self.config.dataset_task == '4d_panoptic':
+            scan, label = self.tester.panoptic_4d_test_stream(self.net, self.test_dataset, self.config, self.stitch_stream)
+            return scan, label
+        else:
+            raise ValueError('Unsupported dataset_task for testing: ' + self.config.dataset_task)
+    
+    def update_dataset(self, data):
+        self.test_dataset.update_data(data)
+    
+    def model_choice(self, chosen_log):
+
+        ###########################
+        # Call the test initializer
+        ###########################
+
+        # Automatically retrieve the last trained model
+        if chosen_log in ['last_ModelNet40', 'last_ShapeNetPart', 'last_S3DIS']:
+
+            # Dataset name
+            test_dataset = '_'.join(chosen_log.split('_')[1:])
+
+            # List all training logs
+            logs = np.sort([os.path.join('results', f) for f in os.listdir('results') if f.startswith('Log')])
+
+            # Find the last log of asked dataset
+            for log in logs[::-1]:
+                log_config = Config()
+                log_config.load(log)
+                if log_config.dataset.startswith(test_dataset):
+                    chosen_log = log
+                    break
+
+            if chosen_log in ['last_ModelNet40', 'last_ShapeNetPart', 'last_S3DIS']:
+                raise ValueError('No log of the dataset "' + test_dataset + '" found')
+
+        # Check if log exists
+        if not os.path.exists(chosen_log):
+            raise ValueError('The given log does not exists: ' + chosen_log)
+
+        return chosen_log
+    
+
+"""
 if __name__ == '__main__':
 
     ###############################
@@ -105,7 +235,7 @@ if __name__ == '__main__':
     chosen_log = 'results/Log_2022-08-30_11-04-33'
     # chosen_log = 'results/trsc600'
     # Choose the index of the checkpoint to load OR None if you want to load the current checkpoint
-    chkp_idx = 0
+    chkp_idx = 1
 
     # Choose to test on validation or test split
     on_val = False
@@ -131,7 +261,7 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
-    print("torch is using: ", torch.cuda.get_device_name())
+    # print("torch is using: ", torch.cuda.get_device_name()) # uncomment when cuda
         
     # torch.cuda.set_device(int(GPU_ID))
     # print(torch.cuda.current_device())
@@ -232,4 +362,4 @@ if __name__ == '__main__':
         tester.panoptic_4d_test_stream(net, test_dataset, config)
     else:
         raise ValueError('Unsupported dataset_task for testing: ' + config.dataset_task)
-    
+ """   

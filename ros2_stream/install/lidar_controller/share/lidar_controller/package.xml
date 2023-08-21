@@ -12,6 +12,9 @@
   <depend>sensor_msgs_py</depend>
   <depend>numpy</depend>
   <depend>os</depend>
+  <depend>sys</depend>
+  <depend>torch</depend>
+  <depend>test_stream</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -4,7 +4,17 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
-import os
+import os, sys
+import torch
+from PyQt5 import QtWidgets, QtCore
+
+from vispy.scene import SceneCanvas, visuals
+from vispy.app import use_app
+
+panoptic_lib = '/home/ros/Desktop/Code/4dpls_stream/4D-PLS'
+sys.path.append(panoptic_lib)
+
+from test_stream import TestStream
 
 class StreamController(Node):
     
@@ -12,31 +22,33 @@ class StreamController(Node):
         super().__init__("controller_node")
         self.get_logger().info("lidar controller started")
         self.root_folder = os.path.join(os.getcwd(), "4D-PLS/")
+        self.buffer_size = 5
+        self.ts = TestStream(buffer_size=self.buffer_size)
         self.check_sequences(self.root_folder)
         self.lidar_subscriber = self.create_subscription(PointCloud2, '/ouster/points', self.subscriber_callback, 10)
     
     def check_sequences(self, root_folder):
         self.streams_folder = os.path.join(root_folder, 'streams')
-        self.seq_folder = os.path.join(self.streams_folder, 'sequences')
-        print(os.getcwd())
-        if not os.path.exists(self.seq_folder):
-            os.makedirs(self.seq_folder, exist_ok= True)
-        list_of_sequences = np.sort(os.listdir(self.seq_folder))
+        # self.seq_folder = os.path.join(self.streams_folder, 'sequences')
+        # print(os.getcwd())
+        # if not os.path.exists(self.seq_folder):
+        #     os.makedirs(self.seq_folder, exist_ok= True)
+        # list_of_sequences = np.sort(os.listdir(self.seq_folder))
         
-        if len(list_of_sequences) <= 0:
-            current_sequence = 0
-        else:
-            current_sequence = int(list_of_sequences[-1]) + 1
+        # if len(list_of_sequences) <= 0:
+        #     current_sequence = 0
+        # else:
+        #     current_sequence = int(list_of_sequences[-1]) + 1
             
-        self.current_seq_folder = os.path.join(self.seq_folder, str(current_sequence).zfill(2), "velodyne")
-        if not os.path.exists(self.current_seq_folder):
-            os.makedirs(self.current_seq_folder, exist_ok=False)
+        # self.current_seq_folder = os.path.join(self.seq_folder, str(current_sequence).zfill(2), "velodyne")
+        # if not os.path.exists(self.current_seq_folder):
+        #     os.makedirs(self.current_seq_folder, exist_ok=False)
         self.current_frame = 0
-        calib_path = os.path.join(os.path.dirname(self.current_seq_folder), "calib.txt")
+        calib_path = os.path.join(self.streams_folder, "calib.txt")
         with open(calib_path, 'w') as file:
             file.write('Tr: 1 0 0 0 0 1 0 0 0 0 1 0\n')
             file.close()
-        pose_path = os.path.join(os.path.dirname(self.current_seq_folder), "poses.txt")
+        pose_path = os.path.join(self.streams_folder, "poses.txt")
         pose_data = np.zeros([10,12]) # 10 rows for 10 point cloud poses
         pose_data[:,0] = 1
         pose_data[:,5] = 1
@@ -81,7 +93,9 @@ class StreamController(Node):
         # self.get_logger().info(str(np.asarray(out_pcd.points)))
         # self.get_logger().info(str(np.asarray(out_pcd.colors)))
         self.get_logger().info(str(bin))
-        bin.tofile(os.path.join(self.current_seq_folder, str(self.current_frame).zfill(6)+'.bin'))
+        self.ts.update_dataset(bin)
+        scan, label = self.ts.start_test()
+        # bin.tofile(os.path.join(self.current_seq_folder, str(self.current_frame).zfill(6)+'.bin'))
         self.current_frame += 1
         
 def main(args=None):
@@ -91,6 +105,7 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         print("Shutting down data input stream")
+        torch.cuda.empty_cache()
     rclpy.shutdown()
         
         

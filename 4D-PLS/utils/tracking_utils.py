@@ -84,6 +84,7 @@ def do_range_projection(points):
     scan_y = points[:, 1]
     scan_z = points[:, 2]
     yaw = -np.arctan2(scan_y, scan_x)
+    np.seterr(divide='ignore', invalid='ignore')
     pitch = np.arcsin(scan_z / depth)
     # get projections in image coords
     proj_x = 0.5 * (yaw / np.pi + 1.0)          # in [0.0, 1.0]

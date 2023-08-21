@@ -217,4 +217,5 @@ results/
 **/.vscode/
 streams/
 test/
+semantic-kitti-api/
 __pycache__/**
