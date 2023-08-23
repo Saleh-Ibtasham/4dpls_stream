@@ -1,5 +1,4 @@
 #
-#
 #      0=================================0
 #      |    Kernel Point Convolutions    |
 #      0=================================0
@@ -23,6 +22,7 @@
 #
 
 # Common libs
+from numba import jit, cuda
 import time
 import numpy as np
 import pickle
@@ -1101,7 +1101,8 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
         The main thread gives a list of indices to load a batch. Each worker is going to work in parallel to load a
         different list of indices.
         """
-
+        time0 = time.perf_counter()
+        
         t = [time.time()]
 
         # Initiate concatanation lists
@@ -1129,15 +1130,15 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
 
             t += [time.time()]
 
-            with self.worker_lock:
-                if self.epoch_i >= self.epoch_inds.shape[0]:
-                    self.epoch_i = 0
-                # Get potential minimum
-                # ind = int(self.epoch_inds[self.epoch_i])
-                wanted_label = int(self.epoch_labels[self.epoch_i])
+            # with self.worker_lock:
+            #     if self.epoch_i >= self.epoch_inds.shape[0]:
+            #         self.epoch_i = 0
+            #     # Get potential minimum
+            #     # ind = int(self.epoch_inds[self.epoch_i])
+            #     wanted_label = int(self.epoch_labels[self.epoch_i])
 
-                # Update epoch indice
-                self.epoch_i += 1
+            #     # Update epoch indice
+            #     self.epoch_i += 1
 
 
             #print (ind)
@@ -1385,7 +1386,7 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
             in_fts = in_fts[:, 0:d_coords]
 
             t += [time.time()]
-
+            
             # Before augmenting, compute reprojection inds (only for validation and test)
             if self.set in ['validation', 'test']:
 
@@ -1593,7 +1594,10 @@ class SemanticKittiStreamDataset(PointCloudStreamDataset):
             print('\n************************\n')
         
         self.data_update_flag = False
-
+        
+        time1 = time.perf_counter()
+        print("Time for getting single data: ", time1 - time0)
+        
         return [self.config.num_layers] + input_list
 
     def __iter__(self):

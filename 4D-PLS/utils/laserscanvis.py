@@ -6,6 +6,7 @@ from vispy.scene import visuals, SceneCanvas
 import numpy as np
 from matplotlib import pyplot as plt
 from utils.laserscan import LaserScan, SemLaserScan
+import time
 
 
 class LaserScanVis:
@@ -140,6 +141,7 @@ class LaserScanVis:
     # self.canvas.update()
     
     self.offset += 1
+    time.sleep(0.05)
 
   # interface
   def key_press(self, event):

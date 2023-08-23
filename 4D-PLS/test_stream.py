@@ -85,10 +85,10 @@ class TestStream():
 
         
         torch.cuda.empty_cache()
-        # torch.cuda.set_device(int(GPU_ID))
-        # print(torch.cuda.current_device())
+        torch.cuda.set_device(int(GPU_ID))
+        print(torch.cuda.current_device())
         
-        print("torch is using: ", torch.cuda.get_device_name()) # uncomment when cuda
+        print("Test_stream: torch is using: ", torch.cuda.get_device_name()) # uncomment when cuda
 
         ###############
         # Previous chkp
@@ -173,11 +173,8 @@ class TestStream():
         return
     
     def start_test(self):
-        if self.config.dataset_task == '4d_panoptic':
-            scan, label = self.tester.panoptic_4d_test_stream(self.net, self.test_dataset, self.config, self.stitch_stream)
-            return scan, label
-        else:
-            raise ValueError('Unsupported dataset_task for testing: ' + self.config.dataset_task)
+
+        return self.tester.panoptic_4d_test_stream(self.net, self.test_dataset, self.config, self.stitch_stream)
     
     def update_dataset(self, data):
         self.test_dataset.update_data(data)

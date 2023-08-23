@@ -83,6 +83,7 @@ class ModelTester:
         self.epoch = checkpoint['epoch']
         net.eval()
         print("Model and training state restored.")
+        print("Tester Model using: ", self.device)
         self.file_counter = 0
         return
 
@@ -1184,6 +1185,7 @@ class ModelTester:
         ############
 
         # Choose validation smoothing parameter (0 for no smothing, 0.99 for big smoothing)
+        time1 = time.perf_counter()
         test_smooth = 0.5
         last_min = -0.5
         softmax = torch.nn.Softmax(1)
@@ -1262,13 +1264,17 @@ class ModelTester:
             print("Cannot retrieve batch from dataset.")
             # break
         # New time
+        time0 = time.perf_counter()
+        print("Time elapsed until this: ", time0 - time1)
         t = t[-1:]
         t += [time.time()]
+        print("In tester: torch is using: ", torch.cuda.get_device_name())
 
         if i == 0:
             print('Done in {:.1f}s'.format(t[1] - t[0]))
 
         flag = True
+    
         if config.n_test_frames > 1:
             lengths = batch.lengths[0].cpu().numpy()
             for b_i, length in enumerate(lengths):
@@ -1289,7 +1295,11 @@ class ModelTester:
         with torch.no_grad():
             # print(batch.__dict__)
 
+            
             outputs, centers_output, var_output, embedding = net(batch, config)
+            
+            time2 = time.perf_counter()
+            print("Inference time elapsed: ", time2 - time1)
             #ins_preds = torch.zeros(outputs.shape[0])
 
             probs = softmax(outputs).cpu().detach().numpy()
@@ -1464,7 +1474,8 @@ class ModelTester:
                 frame_preds = dataset.label_values[np.argmax(frame_probs_uint8,
                                                                         axis=1)].astype(np.int32)
                 # print("saving: ", filepath)
-                new_label = stitch_stream.generate_labels(frame_preds, ins_preds, dataset.frames[-1][-1])
+                new_frame = dataset.frames[-1][-1]
+                new_label = stitch_stream.generate_labels(frame_preds, ins_preds, new_frame)
                 # new_label.tofile('{}/{}/{:02d}/predictions/{:06d}.label'.format('test/stitch', 'sequences', 5, self.file_counter))
                 # self.test_view(dataset.frames[-1][-1], new_label)
                 self.file_counter += 1
@@ -1595,8 +1606,10 @@ class ModelTester:
         # last_min += 1
         # # if last_min > num_votes:
         # break
-
-        return dataset.frames[-1][-1], new_label
+        time3 = time.perf_counter()
+            
+        print("Total Inference Time elapsed: ", time3 - time1)
+        return new_frame, new_label
     
     # def test_view(self, scan, label):
     #     scan = scan.reshape(-1,4)
