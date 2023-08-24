@@ -14,7 +14,7 @@ import time
 from vispy.scene import SceneCanvas, visuals
 from vispy.app import use_app
 
-panoptic_lib = '/home/ros/Desktop/Code/4dpls_stream/4D-PLS'
+panoptic_lib = '/home/ros/Code/4dpls_stream/4D-PLS'
 sys.path.append(panoptic_lib)
 
 from test_stream import TestStream

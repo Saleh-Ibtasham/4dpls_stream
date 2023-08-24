@@ -22,7 +22,6 @@
 #
 
 # Common libs
-from numba import jit, cuda
 import time
 import numpy as np
 import pickle

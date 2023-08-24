@@ -23,7 +23,6 @@ function _colcon_prefix_chain_powershell_source_script {
 
 # source chained prefixes
 _colcon_prefix_chain_powershell_source_script "/opt/ros/rolling\local_setup.ps1"
-_colcon_prefix_chain_powershell_source_script "/home/ros/Desktop/Code/Intern-DemoPanopticSegmentation-Saleh/ros2_stream/install\local_setup.ps1"
 _colcon_prefix_chain_powershell_source_script "/home/ros/ros2_ws/install\local_setup.ps1"
 
 # source this prefix
