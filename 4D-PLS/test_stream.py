@@ -104,7 +104,7 @@ class TestStream():
         else:
             chosen_chkp = np.sort(chkps)[chkp_idx]
         chosen_chkp = os.path.join(self.chosen_log, 'checkpoints', chosen_chkp)
-
+        print("Current chkp being used: ", chosen_chkp)
         # Initialize configuration class
         self.config = Config()
         self.config.load(self.chosen_log)

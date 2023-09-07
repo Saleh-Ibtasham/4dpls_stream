@@ -30,7 +30,7 @@ class StreamController(Node, QtCore.QObject):
         Node.__init__(self, "controller_node")
         QtCore.QObject.__init__(self, None)
         self.get_logger().info("lidar controller started")
-        self.root_folder = os.path.join(os.getcwd(), "4D-PLS/")
+        self.root_folder = os.path.join(os.getcwd(), "")
         self.buffer_size = 5
         self.ts = TestStream(buffer_size=self.buffer_size)
         self.check_sequences(self.root_folder)
