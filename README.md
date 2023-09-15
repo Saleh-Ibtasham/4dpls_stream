@@ -30,7 +30,7 @@ Download this repository and build the ros2_stream works space like below:
 
 ```bash
 cd ros2_stream
-colcon build
+colcon build --symlink-install
 source $PATH_TO_THIS_REPO/ros2_stream/install/setup.bash
 ```
 
@@ -40,83 +40,53 @@ The ros2_stream can also be sourced at the start on launching any terminal by ad
 source $PATH_TO_THIS_REPO/ros2_stream/install/setup.bash
 ```
 
-#### Running the LiDAR Stream and Inferencing the Data
+#### Pre-requisites before running the LiDAR Stream
+
+First make sure that the computer and the LiDAR are in the same subnetwork. Run the bash-commands below to configure the network to the appropriate subnet:
+
+```bash
+ifconfig
+```
+This will give you a list of the network interfaces and the interface the LiDAR is connected to. In Linux 20.04 or newer the interface would typically start with `enp0s...`. This is the interface of your system which is connected to the LiDAR. To connect the system to the same subnet of the LiDAR take the ip of the LiDAR and use the first usable ip address of the network, unless the LiDAR has the first usable ip address, in that case, use any other ip address with proper subnetmask to add the interface to the proper subnet. Make sure to delete the previous subnet the system is connected to in this interface.
+
+To remove the initial subnet the interface is connected use the following command:
+
+```bash
+sudo ip addr del 10.42.0.1/24 dev enp0s31f6
+```
+Assuming the ip address of the interface is `10.42.0.1` with subnetmask `/24` and the interface is `enp0s31f6`
+
+Then simply add the desired subnet to this interface
+
+```bash
+sudo ip addr add 192.168.40.1/24 dev enp0s31f6
+```
+Assuming the ip address of the LiDAR is in the network `192.168.40.0/24`
+
+#### Running the LiDAR Stream and Visualizing the Inferencing the data
 
 Open a terminal and launch the ouster-ros driver
 
 ```bash
 ros2 launch ouster_ros sensor.launch.xml sensor_hostname:=$SENSOR_HOSTNAME
 ```
+The `$SENSOR_HOSTNAME` is the ip address of the LiDAR or the serial number provided with the LiDAR.
 
-Open another terminal and cd into this repository. Run the bash-commands below:
+Open another terminal and cd into the folder `4D-PLS/`. Run the bash-commands below:
 
 ```bash
 cd $THIS_REPOSITORY
 ros2 run lidar_controller stream_controller_node
 ```
-The LiDAR data stream should now be saved in the `4D-PLS/streams/sequences` folder. Each run generates a new sequence in the folder. The folder structure would be like below:
-
-```bash
-streams/
-└── semantic-kitti.yaml
-└── sequences/
-    └── 00/
-        └── poses.txt
-        └── calib.txt
-         └── velodyne
-            ├── 000000.bin
-            ...
-```
+The LiDAR data stream should now be saved in the `streams/` folder.
 
 The `semantic-kitti.yaml` should be available in the same folder of this repo.
 
-After the stream has started a sequence in the `streams/sequences` should be created and it would also be populated with valodyne point cloud files in binary format with appropriate calibration and poses.
+After the stream has started a sequence in the `streams/calib.txt` and `poses.txt` should be created.
 
-At this point, navigate to the `4D-PLS` folder and run the following commands:
+At this point, a window would open with side by side view of real-time LiDAR detection and Inference.
 
-```bash
-cd 4D-PLS
-python test_stream.py
-```
-The 4D-panoptic segmentations would now be created with the 4D-PLS model and saved in the `test` folder with an appropriate logged subfolder.
-The structure of the folder is as follows:
-
-```bash
-test/
-└── log_#ID/
-    └── predictions/
-        ├── 00_0000000.ply
-        ...
-    └── probs/
-        ├── 00_0000000.npy
-        ├── 00_0000000_c.npy
-        ├── 00_0000000_i.npy
-        ...
-    └── reports/
-```
-You can stop the inference by pressing <b>CTRL+C</b>.
-
-The panoptic segmentations would be saved in the `test/probs/` folder with corresponding class and instance files. The files can be used to visualize with long 4D volumes of tracks. 
-
-TO generate the tracks, run the following command:
-
-```bash
-python stitch_tracklets.py --predictions test/model_dir --n_test_frames $NUMBER_OF_FRAMES
-```
-This code will generate predictions in the format of SemanticKITTI under `test/model_dir/stitch$NUMBER_OF_FRAMES`.
-
-#### Visualization of the Inferenced Data
-
-Follow the instructions of the <a href="https://github.com/PRBonn/semantic-kitti-api/commit/439877833a0ca87c79643aef4c3561a1cb3a96bc">semantic-kitt-api</a> repository. Install the dependencies. A virtural environment either with <b>venv or conda</b> can be used for running this repository.
-
-To visualize the data, use the `visualize.py` script. It will open an interactive opengl visualization of the pointclouds along with a spherical projection of each scan into a 64 x 1024 image. To run the visualization follow the command below:
-```bash
-python visualize.py --sequence $SEQUENCE_NO_OF_DATA --dataset relative/path/to/stream/dataset/ --predictions relative/path/to/test/model_dir/stitch$NUMBER_OF_FRAMES
-```
-Navigation:
-- `n` is next scan,
-- `b` is previous scan,
-- `esc` or `q` exits.
+You can stop the inference by closing the window.
 
 ### Authors
 
